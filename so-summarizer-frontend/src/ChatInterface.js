@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import * as microsoftSpeech from 'microsoft-cognitiveservices-speech-sdk';
+import { Volume2, VolumeX } from 'lucide-react';
 import './ChatInterface.css';
 
 function ChatInterface({ 
@@ -14,11 +15,13 @@ function ChatInterface({
   const [error, setError] = useState('');
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [speakingMessageId, setSpeakingMessageId] = useState(null);
   const messagesEndRef = useRef(null);
   const speechSynthesisRef = useRef(null);
   const speechConfigRef = useRef(null);
   const audioConfigRef = useRef(null);
   const recognizerRef = useRef(null);
+  const synthesizerRef = useRef(null);
 
   // Initialize Speech Configuration
   useEffect(() => {
@@ -51,11 +54,6 @@ function ChatInterface({
       ];
       
       setMessages(initialMessages);
-
-      // Automatically trigger text-to-speech for the last message (initial instruction)
-      if (speechSynthesisRef.current) {
-        handleTextToSpeech('I have summarized the StackOverflow page. What would you like to know?');
-      }
     }
   }, [pageContent]);
 
@@ -67,7 +65,10 @@ function ChatInterface({
     scrollToBottom();
   }, [messages]);
 
-  const handleTextToSpeech = (textToSpeak) => {
+  const handleTextToSpeech = (textToSpeak, messageId = null) => {
+    // Stop any ongoing speech
+    stopTextToSpeech();
+
     if (!speechSynthesisRef.current) {
       console.error('Speech synthesis not initialized');
       return;
@@ -81,24 +82,33 @@ function ChatInterface({
         audioConfig
       );
 
+      synthesizerRef.current = synthesizer;
       setIsSpeaking(true);
+      setSpeakingMessageId(messageId);
 
       synthesizer.speakTextAsync(
         textToSpeak,
         () => {
-          setIsSpeaking(false);
-          synthesizer.close();
+          stopTextToSpeech();
         },
         (error) => {
           console.error('Speech synthesis failed:', error);
-          setIsSpeaking(false);
-          synthesizer.close();
+          stopTextToSpeech();
         }
       );
     } catch (err) {
       console.error('Error in text-to-speech:', err);
-      setIsSpeaking(false);
+      stopTextToSpeech();
     }
+  };
+
+  const stopTextToSpeech = () => {
+    if (synthesizerRef.current) {
+      synthesizerRef.current.close();
+      synthesizerRef.current = null;
+    }
+    setIsSpeaking(false);
+    setSpeakingMessageId(null);
   };
 
   const startListening = () => {
@@ -183,16 +193,12 @@ function ChatInterface({
       const result = await response.text();
 
       // Add bot response
-      setMessages(prev => [...prev, { type: 'bot', content: result }]);
+      const newMessage = { type: 'bot', content: result };
+      setMessages(prev => [...prev, newMessage]);
 
       // Store query in history
       if (storeQueryHistory) {
         storeQueryHistory(currentQuery);
-      }
-
-      // Automatically speak the response
-      if (speechSynthesisRef.current) {
-        handleTextToSpeech(result);
       }
 
       // Clear query after submission
@@ -226,6 +232,21 @@ function ChatInterface({
               className={`message ${message.type}-message`}
             >
               {message.content}
+              {message.type === 'bot' && (
+                <button 
+                  className={`speak-toggle-button ${isSpeaking && speakingMessageId === index ? 'speaking' : ''}`}
+                  onClick={() => 
+                    isSpeaking && speakingMessageId === index 
+                      ? stopTextToSpeech() 
+                      : handleTextToSpeech(message.content, index)
+                  }
+                >
+                  {isSpeaking && speakingMessageId === index 
+                    ? <VolumeX size={16} /> 
+                    : <Volume2 size={16} />
+                  }
+                </button>
+              )}
             </div>
           ))}
           <div ref={messagesEndRef} />
