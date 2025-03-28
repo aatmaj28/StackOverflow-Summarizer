@@ -1,6 +1,6 @@
 # 🚀 StackOverflow Conversational Assistant
 
-## Azure AI Developer Hackathon Project
+## Microsoft Azure AI Developer Hackathon Project
 
 ### 🌟 Project Overview
 
